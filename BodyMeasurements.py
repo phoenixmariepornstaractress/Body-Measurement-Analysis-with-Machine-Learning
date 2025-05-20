@@ -1,9 +1,11 @@
-# Professional Python code to model and analyze body measurements
-
 import re
+import math
+import numpy as np
 from typing import Tuple, Dict, List
 
 class BodyMeasurements:
+    CUP_SIZES = ['A', 'B', 'C', 'D', 'DD', 'E', 'F', 'FF', 'G', 'GG', 'H']
+
     def __init__(self, bust: str, waist: int, hips: int):
         self.bust = bust
         self.waist = waist
@@ -16,16 +18,15 @@ class BodyMeasurements:
         return int(match.group(1)), match.group(2)
 
     def estimate_cup_volume(self) -> int:
-        base_cups = ['A', 'B', 'C', 'D', 'DD', 'E', 'F', 'FF', 'G', 'GG', 'H']
         _, cup = self.parse_bra_size()
-        return base_cups.index(cup) if cup in base_cups else 0
+        return self.CUP_SIZES.index(cup) if cup in self.CUP_SIZES else 0
 
     def bust_measurement(self) -> int:
         band_size, _ = self.parse_bra_size()
         return band_size + self.estimate_cup_volume()
 
     def waist_to_hip_ratio(self) -> float:
-        return round(self.waist / self.hips, 2) if self.hips != 0 else 0.0
+        return round(self.waist / self.hips, 2) if self.hips else 0.0
 
     def is_ideal_waist_to_hip(self) -> bool:
         return self.waist_to_hip_ratio() < 0.8
@@ -39,30 +40,28 @@ class BodyMeasurements:
             return "Top-heavy"
         elif hip_diff > bust_diff:
             return "Bottom-heavy"
-        return "Straight/Rectangle"
+        return "Rectangle"
 
     def clothing_size_estimate(self) -> str:
         if self.waist <= 25:
             return "XS"
-        elif 26 <= self.waist <= 27:
+        elif self.waist <= 27:
             return "S"
-        elif 28 <= self.waist <= 29:
+        elif self.waist <= 29:
             return "M"
-        elif 30 <= self.waist <= 32:
+        elif self.waist <= 32:
             return "L"
-        return "XL or above"
+        return "XL+"
 
     def hip_to_bust_ratio(self) -> float:
         bust = self.bust_measurement()
-        return round(self.hips / bust, 2) if bust != 0 else 0.0
+        return round(self.hips / bust, 2) if bust else 0.0
 
     def proportionality_score(self) -> str:
         ratio = self.hip_to_bust_ratio()
         if 0.9 <= ratio <= 1.1:
             return "Proportional"
-        elif ratio < 0.9:
-            return "Bust-dominant"
-        return "Hip-dominant"
+        return "Hip-dominant" if ratio > 1.1 else "Bust-dominant"
 
     def measurement_list(self) -> List[int]:
         return [self.bust_measurement(), self.waist, self.hips]
@@ -75,16 +74,12 @@ class BodyMeasurements:
         return sum(self.measurement_list())
 
     def average_measurement(self) -> float:
-        return round(self.total_measurement_volume() / 3, 2)
+        return round(np.mean(self.measurement_list()), 2)
 
     def dominant_feature(self) -> str:
-        bust, waist, hips = self.measurement_list()
-        max_val = max(bust, waist, hips)
-        if max_val == bust:
-            return "Bust"
-        elif max_val == hips:
-            return "Hips"
-        return "Waist"
+        values = self.measurement_list()
+        features = ["Bust", "Waist", "Hips"]
+        return features[values.index(max(values))]
 
     def measurement_differences(self) -> Dict[str, int]:
         bust = self.bust_measurement()
@@ -96,62 +91,48 @@ class BodyMeasurements:
 
     def shape_index(self) -> float:
         bust, waist, hips = self.measurement_list()
-        try:
-            return round((bust * hips) / (waist ** 2), 2)
-        except ZeroDivisionError:
-            return 0.0
+        return round((bust * hips) / (waist ** 2), 2) if waist else 0.0
 
     def health_category(self) -> str:
         whr = self.waist_to_hip_ratio()
         if whr < 0.8:
             return "Low risk"
-        elif 0.8 <= whr < 0.85:
+        elif whr < 0.85:
             return "Moderate risk"
         return "High risk"
 
     def bust_to_waist_ratio(self) -> float:
-        return round(self.bust_measurement() / self.waist, 2) if self.waist != 0 else 0.0
+        return round(self.bust_measurement() / self.waist, 2) if self.waist else 0.0
 
     def hips_to_waist_ratio(self) -> float:
-        return round(self.hips / self.waist, 2) if self.waist != 0 else 0.0
+        return round(self.hips / self.waist, 2) if self.waist else 0.0
 
     def symmetry_score(self) -> float:
         bust, _, hips = self.measurement_list()
-        return round(1 - abs(bust - hips) / max(bust, hips), 2) if max(bust, hips) != 0 else 0.0
+        return round(1 - abs(bust - hips) / max(bust, hips), 2) if max(bust, hips) else 0.0
 
     def figure_grade(self) -> str:
         score = self.symmetry_score()
         if score > 0.9:
-            return "Excellent Symmetry"
+            return "Excellent"
         elif score > 0.75:
-            return "Good Symmetry"
+            return "Good"
         elif score > 0.6:
-            return "Moderate Symmetry"
+            return "Moderate"
         return "Asymmetrical"
 
-    def bust_proportion_of_total(self) -> float:
-        bust = self.bust_measurement()
-        total = self.total_measurement_volume()
-        return round((bust / total) * 100, 2) if total != 0 else 0.0
-
-    def waist_proportion_of_total(self) -> float:
-        total = self.total_measurement_volume()
-        return round((self.waist / total) * 100, 2) if total != 0 else 0.0
-
-    def hips_proportion_of_total(self) -> float:
-        total = self.total_measurement_volume()
-        return round((self.hips / total) * 100, 2) if total != 0 else 0.0
-
     def volume_distribution(self) -> Dict[str, float]:
+        total = self.total_measurement_volume()
+        bust = self.bust_measurement()
         return {
-            "Bust %": self.bust_proportion_of_total(),
-            "Waist %": self.waist_proportion_of_total(),
-            "Hips %": self.hips_proportion_of_total()
+            "Bust %": round((bust / total) * 100, 2) if total else 0.0,
+            "Waist %": round((self.waist / total) * 100, 2) if total else 0.0,
+            "Hips %": round((self.hips / total) * 100, 2) if total else 0.0
         }
 
     def symmetry_variance(self) -> float:
         bust, _, hips = self.measurement_list()
-        return round(abs(bust - hips) / ((bust + hips) / 2), 2) if (bust + hips) != 0 else 0.0
+        return round(abs(bust - hips) / ((bust + hips) / 2), 2) if (bust + hips) else 0.0
 
     def overall_balance(self) -> str:
         variance = self.symmetry_variance()
@@ -163,7 +144,7 @@ class BodyMeasurements:
 
     def summary(self) -> Dict[str, str]:
         band_size, cup_size = self.parse_bra_size()
-        differences = self.measurement_differences()
+        diffs = self.measurement_differences()
         proportions = self.volume_distribution()
         return {
             "Bust": f"{band_size}{cup_size} ({self.bust_measurement()} in)",
@@ -172,16 +153,16 @@ class BodyMeasurements:
             "Body Type": self.body_type(),
             "Waist-to-Hip Ratio": str(self.waist_to_hip_ratio()),
             "Ideal WHR": "Yes" if self.is_ideal_waist_to_hip() else "No",
-            "Estimated Clothing Size": self.clothing_size_estimate(),
+            "Clothing Size": self.clothing_size_estimate(),
             "Hip-to-Bust Ratio": str(self.hip_to_bust_ratio()),
             "Proportionality": self.proportionality_score(),
             "Balanced Figure": "Yes" if self.is_balanced() else "No",
             "Total Volume": f"{self.total_measurement_volume()} in",
             "Average Measurement": f"{self.average_measurement()} in",
             "Dominant Feature": self.dominant_feature(),
-            "Bust-Waist Difference": f"{differences['Bust-Waist']} in",
-            "Hip-Waist Difference": f"{differences['Hip-Waist']} in",
-            "Hip-Bust Difference": f"{differences['Hip-Bust']} in",
+            "Bust-Waist Difference": f"{diffs['Bust-Waist']} in",
+            "Hip-Waist Difference": f"{diffs['Hip-Waist']} in",
+            "Hip-Bust Difference": f"{diffs['Hip-Bust']} in",
             "Shape Index": str(self.shape_index()),
             "Health Category": self.health_category(),
             "Bust-to-Waist Ratio": str(self.bust_to_waist_ratio()),
@@ -196,9 +177,9 @@ class BodyMeasurements:
         }
 
     def descriptive_summary(self) -> str:
-        return "\n".join(f"{k}: {v}" for k, v in self.summary().items())
+        return "\n".join(f"{key}: {value}" for key, value in self.summary().items())
 
-# Example usage:
 if __name__ == "__main__":
-    measurements = BodyMeasurements(bust="32GG", waist=28, hips=36)
-    print(measurements.descriptive_summary())
+    bm = BodyMeasurements(bust="32GG", waist=28, hips=36)
+    print(bm.descriptive_summary())
+ 
