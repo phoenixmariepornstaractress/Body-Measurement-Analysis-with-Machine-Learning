@@ -4,6 +4,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from openpyxl import Workbook
 
 class BodyMeasurementTracker:
     def __init__(self):
@@ -42,14 +43,10 @@ class BodyMeasurementTracker:
         if self.data.empty:
             return None
         latest = self.data.iloc[-1]
-        weight_estimate = (latest['bust'] + latest['waist'] + latest['hips']) / 3 * 0.45
+        weight_estimate = (latest["bust"] + latest["waist"] + latest["hips"]) / 3 * 0.45
         height_m = height_cm / 100
         bmi = weight_estimate / (height_m ** 2)
         return round(bmi, 2)
-
-    def export_to_csv(self, filename):
-        self.data.to_csv(filename, index=False)
-        print(f"Data exported to {filename}")
 
     def get_summary_statistics(self):
         return self.data.describe()
@@ -98,6 +95,38 @@ class BodyMeasurementTracker:
                 pct_changes[col] = None
         return pct_changes
 
+    def get_entry_by_date(self, date):
+        date = pd.to_datetime(date)
+        matched = self.data[self.data["date"] == date]
+        return matched if not matched.empty else None
+
+    def remove_entry_by_date(self, date):
+        date = pd.to_datetime(date)
+        self.data = self.data[self.data["date"] != date]
+        self.data.reset_index(drop=True, inplace=True)
+
+    def get_max_measurements(self):
+        if self.data.empty:
+            return None
+        return self.data[["bust", "waist", "hips"]].max()
+
+    def get_min_measurements(self):
+        if self.data.empty:
+            return None
+        return self.data[["bust", "waist", "hips"]].min()
+
+    def get_measurement_range(self):
+        if self.data.empty:
+            return None
+        return self.data[["bust", "waist", "hips"]].max() - self.data[["bust", "waist", "hips"]].min()
+
+    def export_to_excel(self, filename):
+        if self.data.empty:
+            print("No data to export.")
+            return
+        self.data.to_excel(filename, index=False, engine='openpyxl')
+        print(f"Data exported to {filename}")
+
 if __name__ == "__main__":
     tracker = BodyMeasurementTracker()
 
@@ -116,9 +145,6 @@ if __name__ == "__main__":
     # Calculate BMI
     bmi = tracker.calculate_bmi(height_cm=165)
     print(f"\nEstimated BMI: {bmi}")
-
-    # Export data
-    tracker.export_to_csv("body_measurements.csv")
 
     # Summary stats
     print("\nSummary Statistics:")
@@ -139,3 +165,21 @@ if __name__ == "__main__":
     # Percent changes
     print("\nPercentage Changes:")
     print(tracker.percentage_change())
+
+    # Entry by date
+    print("\nEntry on 2024-03-01:")
+    print(tracker.get_entry_by_date("2024-03-01"))
+
+    # Max and min values
+    print("\nMaximum Measurements:")
+    print(tracker.get_max_measurements())
+
+    print("\nMinimum Measurements:")
+    print(tracker.get_min_measurements())
+
+    print("\nMeasurement Ranges:")
+    print(tracker.get_measurement_range())
+
+    # Export to Excel
+    tracker.export_to_excel("body_measurements.xlsx")
+ 
