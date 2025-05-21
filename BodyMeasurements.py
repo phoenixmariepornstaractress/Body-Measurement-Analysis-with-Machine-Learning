@@ -1,185 +1,195 @@
-import re
-import math
+# A professional Python script to represent and utilize body measurements and body type in a structured format.
+# This could be used for fashion tech applications, character modeling, or health & fitness tracking systems.
+
+from dataclasses import dataclass
+from typing import Optional
 import numpy as np
-from typing import Tuple, Dict, List
+import math
+import re
 
+@dataclass
 class BodyMeasurements:
-    CUP_SIZES = ['A', 'B', 'C', 'D', 'DD', 'E', 'F', 'FF', 'G', 'GG', 'H']
+    bust: str   # Example: '32GG'
+    waist: int  # In inches
+    hips: int   # In inches
+    butt_type: Optional[str] = None
 
-    def __init__(self, bust: str, waist: int, hips: int):
-        self.bust = bust
-        self.waist = waist
-        self.hips = hips
-
-    def parse_bra_size(self) -> Tuple[int, str]:
+    def _parse_bust_size(self) -> float:
         match = re.match(r"(\d+)([A-Z]+)", self.bust.upper())
         if not match:
-            raise ValueError("Invalid bra size format")
-        return int(match.group(1)), match.group(2)
+            return 0.0
+        band_size = int(match.group(1))
+        cup_size = match.group(2)
+        cup_map = {cup: i for i, cup in enumerate(
+            ["A", "B", "C", "D", "DD", "E", "F", "FF", "G", "GG", "H", "HH", "J", "JJ", "K"], start=1)}
+        cup_value = cup_map.get(cup_size, 0)
+        return band_size + np.clip(math.sqrt(cup_value) * 2.0, 0, 20)
 
-    def estimate_cup_volume(self) -> int:
-        _, cup = self.parse_bra_size()
-        return self.CUP_SIZES.index(cup) if cup in self.CUP_SIZES else 0
+    def get_shape_profile(self) -> str:
+        if self.bust and self.waist and self.hips:
+            bust_numeric = self._parse_bust_size()
+            hip_waist_ratio = self.hips / self.waist
+            bust_waist_ratio = bust_numeric / self.waist
 
-    def bust_measurement(self) -> int:
-        band_size, _ = self.parse_bra_size()
-        return band_size + self.estimate_cup_volume()
+            if hip_waist_ratio >= 1.25 and bust_waist_ratio >= 1.25:
+                return "Hourglass"
+            elif hip_waist_ratio >= 1.3:
+                return "Pear"
+            elif bust_waist_ratio >= 1.3:
+                return "Inverted Triangle"
+            else:
+                return "Rectangle"
+        return "Unknown"
 
-    def waist_to_hip_ratio(self) -> float:
-        return round(self.waist / self.hips, 2) if self.hips else 0.0
+    def describe(self) -> str:
+        return (f"Measurements: {self.bust}-{self.waist}-{self.hips}\n"
+                f"Butt Type: {self.butt_type or 'Not Specified'}\n"
+                f"Body Shape: {self.get_shape_profile()}")
 
-    def is_ideal_waist_to_hip(self) -> bool:
-        return self.waist_to_hip_ratio() < 0.8
+    def body_mass_index(self, height_in_inches: float, age: int = 30) -> Optional[float]:
+        if height_in_inches <= 0 or self.waist <= 0 or age <= 0:
+            return None
+        height_cm = height_in_inches * 2.54
+        bmi = (1.20 * ((self.waist / height_cm) ** 2) * 10000) + (0.23 * age) - 5.4
+        return round(bmi, 2)
 
-    def body_type(self) -> str:
-        bust_diff = self.bust_measurement() - self.waist
-        hip_diff = self.hips - self.waist
-        if bust_diff > 6 and hip_diff > 6:
-            return "Hourglass"
-        elif bust_diff > hip_diff:
-            return "Top-heavy"
-        elif hip_diff > bust_diff:
-            return "Bottom-heavy"
-        return "Rectangle"
+    def waist_to_hip_ratio(self) -> Optional[float]:
+        if self.waist > 0 and self.hips > 0:
+            return round(self.waist / self.hips, 2)
+        return None
 
-    def clothing_size_estimate(self) -> str:
-        if self.waist <= 25:
-            return "XS"
-        elif self.waist <= 27:
-            return "S"
-        elif self.waist <= 29:
-            return "M"
-        elif self.waist <= 32:
-            return "L"
-        return "XL+"
+    def bust_to_waist_ratio(self) -> Optional[float]:
+        bust = self._parse_bust_size()
+        return round(bust / self.waist, 2) if self.waist > 0 else None
 
-    def hip_to_bust_ratio(self) -> float:
-        bust = self.bust_measurement()
-        return round(self.hips / bust, 2) if bust else 0.0
+    def hip_to_bust_ratio(self) -> Optional[float]:
+        bust = self._parse_bust_size()
+        return round(self.hips / bust, 2) if bust > 0 else None
 
-    def proportionality_score(self) -> str:
-        ratio = self.hip_to_bust_ratio()
-        if 0.9 <= ratio <= 1.1:
-            return "Proportional"
-        return "Hip-dominant" if ratio > 1.1 else "Bust-dominant"
+    def is_curvy(self) -> bool:
+        return self.get_shape_profile() in ["Hourglass", "Pear"]
 
-    def measurement_list(self) -> List[int]:
-        return [self.bust_measurement(), self.waist, self.hips]
+    def is_proportional(self, tolerance: float = 0.1) -> bool:
+        bust = self._parse_bust_size()
+        return abs(bust - self.hips) / max(bust, self.hips) <= tolerance
 
-    def is_balanced(self) -> bool:
-        bust, waist, hips = self.measurement_list()
-        return abs(bust - hips) <= 2 and abs(bust - waist) > 6
-
-    def total_measurement_volume(self) -> int:
-        return sum(self.measurement_list())
-
-    def average_measurement(self) -> float:
-        return round(np.mean(self.measurement_list()), 2)
-
-    def dominant_feature(self) -> str:
-        values = self.measurement_list()
-        features = ["Bust", "Waist", "Hips"]
-        return features[values.index(max(values))]
-
-    def measurement_differences(self) -> Dict[str, int]:
-        bust = self.bust_measurement()
-        return {
-            "Bust-Waist": bust - self.waist,
-            "Hip-Waist": self.hips - self.waist,
-            "Hip-Bust": self.hips - bust
+    def recommendation(self) -> str:
+        shape = self.get_shape_profile()
+        recs = {
+            "Hourglass": "Fitted dresses and belts to accentuate the waist.",
+            "Pear": "A-line skirts and embellished tops to balance proportions.",
+            "Inverted Triangle": "Wide-leg pants and V-neck tops to soften shoulders.",
+            "Rectangle": "Peplum tops and ruching to create curves."
         }
+        return recs.get(shape, "Choose clothing that makes you feel confident and comfortable.")
 
-    def shape_index(self) -> float:
-        bust, waist, hips = self.measurement_list()
-        return round((bust * hips) / (waist ** 2), 2) if waist else 0.0
+    def estimated_body_fat_percentage(self, age: int, gender: str = "female") -> Optional[float]:
+        if gender.lower() != "female" or self.waist <= 0 or self.hips <= 0:
+            return None
+        ratio = self.waist_to_hip_ratio()
+        return round(76 - (20 * ratio), 2) if ratio else None
 
-    def health_category(self) -> str:
-        whr = self.waist_to_hip_ratio()
-        if whr < 0.8:
-            return "Low risk"
-        elif whr < 0.85:
-            return "Moderate risk"
-        return "High risk"
+    def symmetry_index(self) -> Optional[float]:
+        bust = self._parse_bust_size()
+        return round(abs(bust - self.hips) / max(bust, self.hips), 2) if self.hips > 0 and bust > 0 else None
 
-    def bust_to_waist_ratio(self) -> float:
-        return round(self.bust_measurement() / self.waist, 2) if self.waist else 0.0
+    def size_category(self) -> str:
+        bust = self._parse_bust_size()
+        if bust < 34:
+            return "Petite"
+        elif 34 <= bust <= 38:
+            return "Medium"
+        else:
+            return "Full-figured"
 
-    def hips_to_waist_ratio(self) -> float:
-        return round(self.hips / self.waist, 2) if self.waist else 0.0
+    def balance_score(self) -> Optional[float]:
+        bust = self._parse_bust_size()
+        if self.waist and self.hips and bust:
+            avg_diff = np.mean([abs(bust - self.waist), abs(self.hips - self.waist)])
+            return round(1 - (avg_diff / max(bust, self.hips)), 2)
+        return None
 
-    def symmetry_score(self) -> float:
-        bust, _, hips = self.measurement_list()
-        return round(1 - abs(bust - hips) / max(bust, hips), 2) if max(bust, hips) else 0.0
+    def total_volume_index(self) -> Optional[float]:
+        bust = self._parse_bust_size()
+        return round((bust + self.waist + self.hips) / 3, 2) if bust and self.waist and self.hips else None
 
-    def figure_grade(self) -> str:
-        score = self.symmetry_score()
-        if score > 0.9:
-            return "Excellent"
+    def shape_symmetry_ratio(self) -> Optional[float]:
+        bust = self._parse_bust_size()
+        return round(min(bust, self.hips) / max(bust, self.hips), 2) if bust and self.hips else None
+
+    def silhouette_type(self) -> str:
+        score = self.balance_score()
+        if score is None:
+            return "Undefined"
+        elif score > 0.9:
+            return "Balanced Silhouette"
         elif score > 0.75:
-            return "Good"
-        elif score > 0.6:
-            return "Moderate"
-        return "Asymmetrical"
+            return "Mildly Asymmetric"
+        return "Highly Asymmetric"
 
-    def volume_distribution(self) -> Dict[str, float]:
-        total = self.total_measurement_volume()
-        bust = self.bust_measurement()
-        return {
-            "Bust %": round((bust / total) * 100, 2) if total else 0.0,
-            "Waist %": round((self.waist / total) * 100, 2) if total else 0.0,
-            "Hips %": round((self.hips / total) * 100, 2) if total else 0.0
-        }
+    def body_proportion_score(self) -> Optional[float]:
+        bust = self._parse_bust_size()
+        return round((bust / self.waist + self.hips / self.waist) / 2, 2) if bust and self.waist and self.hips else None
 
-    def symmetry_variance(self) -> float:
-        bust, _, hips = self.measurement_list()
-        return round(abs(bust - hips) / ((bust + hips) / 2), 2) if (bust + hips) else 0.0
+    def fashion_fit_index(self) -> Optional[float]:
+        scores = {"Hourglass": 0.95, "Pear": 0.85, "Inverted Triangle": 0.80, "Rectangle": 0.75}
+        return scores.get(self.get_shape_profile(), 0.70)
 
-    def overall_balance(self) -> str:
-        variance = self.symmetry_variance()
-        if variance < 0.1:
-            return "Well-balanced"
-        elif variance < 0.2:
-            return "Slightly unbalanced"
-        return "Unbalanced"
+    def is_idealized_proportions(self) -> Optional[bool]:
+        bust = self._parse_bust_size()
+        return abs(bust - self.hips) < 2 and self.waist < bust * 0.75
 
-    def summary(self) -> Dict[str, str]:
-        band_size, cup_size = self.parse_bra_size()
-        diffs = self.measurement_differences()
-        proportions = self.volume_distribution()
-        return {
-            "Bust": f"{band_size}{cup_size} ({self.bust_measurement()} in)",
-            "Waist": f"{self.waist} in",
-            "Hips": f"{self.hips} in",
-            "Body Type": self.body_type(),
-            "Waist-to-Hip Ratio": str(self.waist_to_hip_ratio()),
-            "Ideal WHR": "Yes" if self.is_ideal_waist_to_hip() else "No",
-            "Clothing Size": self.clothing_size_estimate(),
-            "Hip-to-Bust Ratio": str(self.hip_to_bust_ratio()),
-            "Proportionality": self.proportionality_score(),
-            "Balanced Figure": "Yes" if self.is_balanced() else "No",
-            "Total Volume": f"{self.total_measurement_volume()} in",
-            "Average Measurement": f"{self.average_measurement()} in",
-            "Dominant Feature": self.dominant_feature(),
-            "Bust-Waist Difference": f"{diffs['Bust-Waist']} in",
-            "Hip-Waist Difference": f"{diffs['Hip-Waist']} in",
-            "Hip-Bust Difference": f"{diffs['Hip-Bust']} in",
-            "Shape Index": str(self.shape_index()),
-            "Health Category": self.health_category(),
-            "Bust-to-Waist Ratio": str(self.bust_to_waist_ratio()),
-            "Hips-to-Waist Ratio": str(self.hips_to_waist_ratio()),
-            "Symmetry Score": str(self.symmetry_score()),
-            "Figure Grade": self.figure_grade(),
-            "Bust % of Total": f"{proportions['Bust %']}%",
-            "Waist % of Total": f"{proportions['Waist %']}%",
-            "Hips % of Total": f"{proportions['Hips %']}%",
-            "Symmetry Variance": str(self.symmetry_variance()),
-            "Overall Balance": self.overall_balance()
-        }
+    def bust_hip_difference(self) -> float:
+        return round(abs(self._parse_bust_size() - self.hips), 2)
 
-    def descriptive_summary(self) -> str:
-        return "\n".join(f"{key}: {value}" for key, value in self.summary().items())
+    def is_balanced_body(self) -> bool:
+        sym = self.symmetry_index()
+        return sym is not None and sym <= 0.1
+
+    def enhancement_focus(self) -> str:
+        bust = self._parse_bust_size()
+        if self.hips > bust:
+            return "Upper body enhancement (e.g., padded bras, shoulder details)"
+        elif bust > self.hips:
+            return "Lower body enhancement (e.g., padded hips, flared skirts)"
+        return "Balanced body – no enhancement needed"
+
+    def curvature_balance_index(self) -> Optional[float]:
+        bust = self._parse_bust_size()
+        if self.waist == 0:
+            return None
+        return round(((bust - self.waist) + (self.hips - self.waist)) / (2 * self.waist), 2)
+
+    def hourglass_similarity_score(self) -> Optional[float]:
+        bust = self._parse_bust_size()
+        if not all([bust, self.waist, self.hips]):
+            return None
+        ideal = np.array([36, 24, 36])
+        actual = np.array([bust, self.waist, self.hips])
+        return round(1 / (1 + np.linalg.norm(actual - ideal)), 3)
 
 if __name__ == "__main__":
-    bm = BodyMeasurements(bust="32GG", waist=28, hips=36)
-    print(bm.descriptive_summary())
- 
+    user_profile = BodyMeasurements(bust="32GG", waist=28, hips=36, butt_type="Bubble Butt")
+    print(user_profile.describe())
+    print(f"BMI (adjusted): {user_profile.body_mass_index(65)}")
+    print(f"Waist-to-Hip Ratio: {user_profile.waist_to_hip_ratio()}")
+    print(f"Bust-to-Waist Ratio: {user_profile.bust_to_waist_ratio()}")
+    print(f"Hip-to-Bust Ratio: {user_profile.hip_to_bust_ratio()}")
+    print(f"Is Curvy: {'Yes' if user_profile.is_curvy() else 'No'}")
+    print(f"Is Proportional: {'Yes' if user_profile.is_proportional() else 'No'}")
+    print(f"Style Recommendation: {user_profile.recommendation()}")
+    print(f"Estimated Body Fat %: {user_profile.estimated_body_fat_percentage(age=30)}")
+    print(f"Symmetry Index: {user_profile.symmetry_index()}")
+    print(f"Size Category: {user_profile.size_category()}")
+    print(f"Balance Score: {user_profile.balance_score()}")
+    print(f"Total Volume Index: {user_profile.total_volume_index()}")
+    print(f"Shape Symmetry Ratio: {user_profile.shape_symmetry_ratio()}")
+    print(f"Silhouette Type: {user_profile.silhouette_type()}")
+    print(f"Body Proportion Score: {user_profile.body_proportion_score()}")
+    print(f"Fashion Fit Index: {user_profile.fashion_fit_index()}")
+    print(f"Idealized Proportions: {'Yes' if user_profile.is_idealized_proportions() else 'No'}")
+    print(f"Bust-Hip Difference: {user_profile.bust_hip_difference()}")
+    print(f"Is Balanced Body: {'Yes' if user_profile.is_balanced_body() else 'No'}")
+    print(f"Enhancement Focus: {user_profile.enhancement_focus()}")
+    print(f"Curvature Balance Index: {user_profile.curvature_balance_index()}")
+    print(f"Hourglass Similarity Score: {user_profile.hourglass_similarity_score()}")
